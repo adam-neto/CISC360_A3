@@ -290,14 +290,14 @@ Q3: Tiny Theorem Prover
        prove_all   calls prove_core, collecting all solutions.
 
     [X] Use-Assumption
-    [ ] Top-Right
+    [ zz] Top-Right
     [X] Implies-Right
     [X] And-Right
-    [ ] Or-Right 1 and Or-Right 2
+    [ zz] Or-Right 1 and Or-Right 2
     
     [X] Bot-Left
     [X] Implies-Left
-    [ ] And-Left
+    [ zz] And-Left
     [ ] Or-Left
 -}
 
@@ -372,7 +372,7 @@ prove_core ctx goal (kSucceed, kFail) =
       try_right_rules () =
            case goal of
                 Top              -> -- Top-Right rule
-                     undefined
+                     kSucceed TopR   -- **no second arg???
 
                 Implies phi psi  -> -- Implies-Right rule
                      prove_core (phi : ctx)
@@ -392,7 +392,14 @@ prove_core ctx goal (kSucceed, kFail) =
                                  try_prove_left)
 
                 Or phi1 phi2     -> -- Or-Right rules (try Or-Right-1, if it fails, try Or-Right-2)
-                     undefined
+                     prove_core ctx phi1
+                            (\deriv1 -> \more1 ->
+                                  kSucceed (OrR 1 deriv1) more1,
+                                  prove_core ctx phi2
+                                      (\deriv2 -> \more2 ->
+                                          kSucceed (OrR 2 deriv2) more2,
+                                      try_prove_left)
+                            )
                 
                 _                 -> -- Can't use any of the -Right rules, so:
                      try_prove_left ()
@@ -448,10 +455,22 @@ prove_left original (done, focus : rest) goal (kSucceed, kFail) =
                                         leave_alone)
  
         And phi1 phi2 ->      -- try And-Left rule
-            undefined
+            prove_core (done ++ rest) phi1 
+                (\deriv1 -> \more1 ->
+                    prove_core (done ++ rest) phi2
+                        (\deriv2 -> \more2 ->
+                            kSucceed (AndL deriv1 deriv2) more2,
+                          more1),
+                    leave_alone)
         
         Or phi1 phi2 ->       -- try Or-Left rule
-            undefined
+            prove_core (done ++ rest) phi1 
+                (\deriv1 -> \more1 ->
+                    prove_core (done ++ rest) phi2
+                        (\deriv2 -> \more2 ->
+                            kSucceed (AndL deriv1 deriv2) more2,
+                          more1),
+                    leave_alone)
  
         focus -> leave_alone ()
 
