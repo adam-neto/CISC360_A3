@@ -195,6 +195,7 @@ instance Show TruthTable where
   You may use the built-in function "nub", which takes a list and returns the list
   without duplicates.
 -}
+
 getVariables :: Formula -> [Variable]
 
 getVariables Top               = []
@@ -202,10 +203,13 @@ getVariables Bot               = []
 
 getVariables (Atom v)          = [v]
 
-getVariables (Not phi)         = getVariables phi
-getVariables (And phi1 phi2)   = getVariables (phi1, phi2)
-getVariables (Or phi1 phi2)    = getVariables (phi1, phi2)
-getVariables (Implies phi psi) = getVariables (phi1, psi)
+getVariables (Not phi)         = nub (getVariables phi)
+getVariables (And phi1 phi2)   = nub ((getVariables phi1) ++ (getVariables phi2))
+getVariables (Or phi1 phi2)    = nub ((getVariables phi1) ++ (getVariables phi2))
+getVariables (Implies phi psi) = nub ((getVariables phi) ++ (getVariables psi))
+
+
+
 
 {-
    Q2b: getValuations:
@@ -213,8 +217,9 @@ getVariables (Implies phi psi) = getVariables (phi1, psi)
    Build a list of all possible valuations for a set of atomic propositions
 -}
 getValuations :: [Variable] -> [Valuation]
-getValuations []       = [[]]
-getValuations (c : cs) = undefined
+getValuations []     = [[]]
+getValuations (c:cs) = map (\ys -> (c, True) : ys) (getValuations cs) 
+                    ++ map (\ys -> (c, False) : ys) (getValuations cs)
 {-
   Hint: Try the method in 360-lec7.pdf:
   First, figure out what each of the following 3 calls should return:
@@ -239,6 +244,11 @@ getValuations (c : cs) = undefined
     Evaluate a formula with a particular valuation,
      returning the resulting boolean value
 -}
+
+my_lookup :: Valuation -> Variable -> Bool
+my_lookup [] v                  = False   -- base case (hope to never see this)
+my_lookup ((name, truth):xs) v  = if v == name then truth else (my_lookup xs v)
+
 evalF :: Valuation -> Formula -> Bool
 evalF valu formula =
     case formula of
@@ -246,9 +256,9 @@ evalF valu formula =
         Bot               -> False
         Not phi1          -> not (evalF valu phi1)
         Implies phi1 phi2 -> not (evalF valu phi1) || (evalF valu phi2)
-        Atom c            -> undefined
-        And phi1 phi2     -> undefined
-        Or phi1 phi2      -> undefined
+        Atom c            -> my_lookup valu c
+        And phi1 phi2     -> (evalF valu phi1) && (evalF valu phi2)
+        Or phi1 phi2      -> (evalF valu phi1) || (evalF valu phi2)
 
 -- buildTable:
 --  Build a truth table for a given formula.
