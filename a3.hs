@@ -110,15 +110,22 @@ that takes a Formula, and returns:
 
 You will probably need to write at least one helper function.
 -}
+
+isPosLit :: Formula -> Bool
+isPosLit (Atom _) = True
+isPosLit _        = False
+
+isConj :: Formula -> Bool
+isConj (Atom _)     = True   -- an atom is a pos lit, which is a conj of pos lits
+isConj (And f1 f2)  = isConj f1 && isConj f2
+isConj _            = False  -- otherwise case
+
+
 classify :: Formula -> FormulaKind
 
-classify (Atom a) = Fact                                                       -- atom returns Fact
-classify (Implies (And (Atom a) (Atom b)) (Atom c)) = Rule                     -- atom AND atom -> atom returns Rule
-classify (Implies (And (And (Atom a) (Atom b)) (Atom c)) (Atom d)) = Rule      -- (atom and atom) and atom -> atom returns Rule
-classify (Implies (And (Atom a) (And (Atom b) (Atom c))) (Atom d)) = Rule      -- atom and (atom and atom) -> atom returns Rule
-classify (Implies (And (And (Atom a) (Atom b)) (And (Atom c) (Atom d))) (Atom e)) = Rule  -- (atom and atom) and (atom and atom) -> atom returns Rule
-classify _ = NotClause                                                         -- other possibilities return NotClause
-
+classify (Atom _)        = Fact
+classify (Implies f1 f2) = if (isConj f1 && isPosLit f2) then Rule else NotClause
+classify _               = NotClause
 
 {- Q1b: test cases
 
@@ -129,14 +136,18 @@ test_classify1 :: Bool
 test_classify1 = (classify (Atom "T") == Fact)  -- tests first clause
 {- add your test cases here: -}
 
-test_classify2 = (classify formula1 == Rule)    -- tests second clause
-test_classify3 = (classify (Implies (And (And (vA) (vB)) (vC)) (vD)) == Rule)             -- tests third clause
-test_classify4 = (classify (Implies (And (vA) (And (vB) (vC))) (vD)) == Rule)             -- tests fourth clause
-test_classify5 = (classify (Implies (And (And (vA) (vB)) (And (vC) (vD))) (vE)) == Rule)  -- tests fifth clause
-test_classify6 = (classify formula7 == NotClause)    -- tests sixth clause (NotClause)
+test_classify2 = (classify formula1 == Rule)        -- tests conj => pos lit
+test_classify3 = (classify formula2 == NotClause)   -- tests bot => conj
+test_classify4 = (classify formula3 == NotClause)   -- tests conj => top
+test_classify5 = (classify formula4 == NotClause)   -- tests conj
+test_classify6 = (classify formula6 == NotClause)   -- tests not
+test_classify7 = (classify formula7 == Rule)        -- tests pos lit => pos lit
+test_classify8 = (classify formula8 == NotClause)   -- tests or
 
 test_classify :: Bool
-test_classify = all (\x -> x) [test_classify1, test_classify2, test_classify3, test_classify4, test_classify5, test_classify6
+test_classify = all (\x -> x) [test_classify1, test_classify2, test_classify3, 
+                              test_classify4, test_classify5, test_classify6,
+                              test_classify7, test_classify8
                                ] --           ^ add your test cases here
 {- The library function 'all' applies its first argument to each element in the list,
    and returns True iff the first argument returns True every time. -}
@@ -372,7 +383,7 @@ prove_core ctx goal (kSucceed, kFail) =
       try_right_rules () =
            case goal of
                 Top              -> -- Top-Right rule
-                     kSucceed TopR   -- **no second arg???
+                     kSucceed TopR try_prove_left
 
                 Implies phi psi  -> -- Implies-Right rule
                      prove_core (phi : ctx)
@@ -395,11 +406,10 @@ prove_core ctx goal (kSucceed, kFail) =
                      prove_core ctx phi1
                             (\deriv1 -> \more1 ->
                                   kSucceed (OrR 1 deriv1) more1,
-                                  prove_core ctx phi2
-                                      (\deriv2 -> \more2 ->
+                                  (\() -> prove_core ctx phi2
+                                      (\deriv2 -> \more2 -> 
                                           kSucceed (OrR 2 deriv2) more2,
-                                      try_prove_left)
-                            )
+                                      try_prove_left)))
                 
                 _                 -> -- Can't use any of the -Right rules, so:
                      try_prove_left ()
@@ -455,20 +465,15 @@ prove_left original (done, focus : rest) goal (kSucceed, kFail) =
                                         leave_alone)
  
         And phi1 phi2 ->      -- try And-Left rule
-            prove_core (done ++ rest) phi1 
-                (\deriv1 -> \more1 ->
-                    prove_core (done ++ rest) phi2
-                        (\deriv2 -> \more2 ->
-                            kSucceed (AndL deriv1 deriv2) more2,
-                          more1),
-                    leave_alone)
+            prove_left original (done ++ [phi1], [phi2] ++ rest) goal (kSucceed, kFail)
+
         
         Or phi1 phi2 ->       -- try Or-Left rule
-            prove_core (done ++ rest) phi1 
+            prove_left original (done ++ [phi1], rest) goal 
                 (\deriv1 -> \more1 ->
-                    prove_core (done ++ rest) phi2
+                    prove_left original (done ++ [phi2], rest) goal
                         (\deriv2 -> \more2 ->
-                            kSucceed (AndL deriv1 deriv2) more2,
+                            kSucceed (OrL deriv1 deriv2) more2,
                           more1),
                     leave_alone)
  
